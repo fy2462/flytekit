@@ -1,0 +1,28 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "name": "Python Debugger: Current File with Arguments",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/flytekit/clis/sdk_in_container/pyflyte.py",
+            "console": "integratedTerminal",
+            "args": [
+                "run", 
+                "--project", "flytekit",
+                "--domain", "development",
+                "--remote",
+                "test.py", "hello_world_wf",
+            ],
+            "env": {
+                "FLYTE_SDK_LOGGING_LEVEL": "10",
+                "FLYTE_SDK_DEV_LOGGING_LEVEL": "10",
+                "FLYTE_SDK_RICH_TRACEBACKS": "1"
+            }
+        }
+    ]
+}
