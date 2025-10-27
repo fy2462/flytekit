@@ -443,6 +443,7 @@ class FlyteRemote(object):
             name,
             version,
         )
+        # 这里的task是指
         admin_task = self.client.get_task(task_id)
         flyte_task = FlyteTask.promote_from_model(admin_task.closure.compiled_task.template)
         flyte_task.template._id = task_id
@@ -484,7 +485,9 @@ class FlyteRemote(object):
             version,
         )
 
+        # 获取WF
         admin_workflow = self.client.get_workflow(workflow_id)
+        # 编译完毕的WF
         compiled_wf = admin_workflow.closure.compiled_workflow
 
         wf_templates = [compiled_wf.primary.template]
@@ -928,6 +931,7 @@ class FlyteRemote(object):
                 version = cp_entity.id.version
             ident = self._resolve_identifier(ResourceType.WORKFLOW, cp_entity.template.id.name, version, settings)
             try:
+                # 创建workflow
                 self.client.create_workflow(workflow_identifier=ident, workflow_spec=cp_entity)
             except FlyteEntityAlreadyExistsException:
                 logger.debug(f" {ident} Already Exists!")
@@ -952,6 +956,7 @@ class FlyteRemote(object):
                     options=options,
                 )
                 try:
+                    # 同时创建LP
                     self.client.create_launch_plan(lp_entity.id, lp_entity.spec)
                 except FlyteEntityAlreadyExistsException:
                     logger.debug(f" {lp_entity.id} Already Exists!")
@@ -1086,6 +1091,7 @@ class FlyteRemote(object):
 
         ident = run_sync(self._serialize_and_register, entity=entity, settings=serialization_settings, version=version)
 
+        # 校验task是否注册成功
         ft = self.fetch_task(
             ident.project,
             ident.domain,
@@ -1411,11 +1417,13 @@ class FlyteRemote(object):
             image_config = ImageConfig.auto_default_image()
 
         with tempfile.TemporaryDirectory() as tmp_dir:
+            # 不拷贝，直接用原路径
             if fast_package_options and fast_package_options.copy_style != CopyFileDetection.NO_COPY:
                 md5_bytes, upload_native_url = self.fast_package(
                     pathlib.Path(source_path), False, tmp_dir, fast_package_options
                 )
             else:
+                # 打包上传
                 archive_fname = pathlib.Path(os.path.join(tmp_dir, "script_mode.tar.gz"))
                 compress_scripts(source_path, str(archive_fname), get_all_modules(source_path, module_name))
                 md5_bytes, upload_native_url = self.upload_file(

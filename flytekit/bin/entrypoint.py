@@ -180,6 +180,7 @@ def _dispatch_execute(
     task_def = None
     try:
         try:
+            # 插件类、task类的具体实现类
             task_def = load_task()
         except Exception as e:
             # If the task can not be loaded, then it's most likely a user error. For example,
@@ -189,16 +190,22 @@ def _dispatch_execute(
         logger.debug(f"Starting _dispatch_execute for {task_def.name}")
         # Step1
         local_inputs_file = os.path.join(ctx.execution_state.working_dir, "inputs.pb")
+        # 创建了一个线程池运行协程函数(asyncio.AbstractEventLoop)
+        # 异步执行 async_get_data
+        # inputs_path是远程路径，写入本地文件local_inputs_file
         ctx.file_access.get_data(inputs_path, local_inputs_file)
         input_proto = utils.load_proto_from_file(_literals_pb2.LiteralMap, local_inputs_file)
+        # 输入已经变成proto object了
         idl_input_literals = _literal_models.LiteralMap.from_flyte_idl(input_proto)
 
         # Step2
         # Invoke task - dispatch_execute
+        # 执行具体task, 将任务放入执行器中执行(本地执行?)
         outputs = task_def.dispatch_execute(ctx, idl_input_literals)
 
         # Step3a
         if isinstance(outputs, VoidPromise):
+            # void函数，输出空map
             logger.warning("Task produces no outputs")
             output_file_dict = {_constants.OUTPUT_FILE_NAME: _literal_models.LiteralMap(literals={})}
         elif isinstance(outputs, _literal_models.LiteralMap):
@@ -241,6 +248,7 @@ def _dispatch_execute(
                     # alongside the regular outputs.pb, deck.pb, etc.
                     # N.B.: by construction `offloaded_filename` is guaranteed to be unique
                     offloaded_filename = f"{k}_offloaded_metadata.pb"
+                    # 将较大字段进行meta和实体pb文件拆分
                     offloaded_literal = _literal_models.Literal(
                         offloaded_metadata=_literal_models.LiteralOffloadedMetadata(
                             uri=f"{output_prefix}/{offloaded_filename}",
@@ -258,6 +266,7 @@ def _dispatch_execute(
                 _constants.OUTPUT_FILE_NAME: outputs,
                 **offloaded_literals,
             }
+        # 异步wf，resultl是feature
         elif isinstance(outputs, _dynamic_job.DynamicJobSpec):
             output_file_dict = {_constants.FUTURES_FILE_NAME: outputs}
         else:
@@ -340,13 +349,16 @@ def _dispatch_execute(
         logger.error(exc_str)
         logger.error("!! End Error Captured by Flyte !!")
 
+    # 所有输出文件内容写入engine_dir/k文件中
     for k, v in output_file_dict.items():
         utils.write_proto_to_file(v.to_flyte_idl(), os.path.join(ctx.execution_state.engine_dir, k))
 
+    # 上传数据
     ctx.file_access.put_data(ctx.execution_state.engine_dir, output_prefix, is_multipart=True)
     logger.info(f"Engine folder written successfully to the output prefix {output_prefix}")
 
     if task_def is not None and not getattr(task_def, "disable_deck", True):
+        # 将 new_user_params 中的deck数据写入html，并进行上传
         _output_deck(
             task_name=task_def.name.split(".")[-1],
             new_user_params=ctx.user_space_params,
@@ -418,6 +430,7 @@ def get_one_of(*args) -> str:
     return ""
 
 
+# 设置当前任务的上下文
 @contextlib.contextmanager
 def setup_execution(
     raw_output_data_prefix: str,
@@ -461,6 +474,7 @@ def setup_execution(
 
     ctx = FlyteContextManager.current_context()
     # Create directories
+    # 远程文件持久化，本地的随机文件缓存目录
     user_workspace_dir = ctx.file_access.get_random_local_directory()
     logger.info(f"Using user directory {user_workspace_dir}")
     pathlib.Path(user_workspace_dir).mkdir(parents=True, exist_ok=True)
@@ -468,9 +482,11 @@ def setup_execution(
 
     checkpointer = None
     if checkpoint_path is not None:
+        # 会同步地对用户指定的文件或文件夹进行检查点保存
         checkpointer = SyncCheckpoint(checkpoint_dest=checkpoint_path, checkpoint_src=prev_checkpoint)
         logger.debug(f"Checkpointer created with source {prev_checkpoint} and dest {checkpoint_path}")
 
+    # 创建执行参数
     execution_parameters = ExecutionParameters(
         execution_id=_identifier.WorkflowExecutionIdentifier(
             project=exe_project,
@@ -508,6 +524,7 @@ def setup_execution(
         "flyte-execution-name": exe_name,
     }
     try:
+        # 本地文件缓存、输出数据、meta
         file_access = FileAccessProvider(
             local_sandbox_dir=tempfile.mkdtemp(prefix="flyte"),
             raw_output_prefix=raw_output_data_prefix,
@@ -519,6 +536,9 @@ def setup_execution(
 
     ctx = ctx.new_builder().with_file_access(file_access).build()
 
+    # 这次执行的类型
+    # TASK_EXECUTION、LOCAL_WORKFLOW_EXECUTION、LOCAL_TASK_EXECUTION、DYNAMIC_TASK_EXECUTION
+    # 也会有 EAGER_EXECUTION、EAGER_LOCAL_EXECUTION
     es = ctx.new_execution_state().with_params(
         mode=ExecutionState.Mode.TASK_EXECUTION,
         user_space_params=execution_parameters,
@@ -527,7 +547,10 @@ def setup_execution(
     omt = OutputMetadataTracker()
     cb = ctx.new_builder().with_execution_state(es).with_output_metadata_tracker(omt)
 
+    # SERIALIZED_CONTEXT_ENV_VAR
+    # base64编码的json字符串
     if compressed_serialization_settings:
+        # dataclasses_json 类，用户类和json之间的转换
         ss = SerializationSettings.from_transport(compressed_serialization_settings)
         ssb = ss.new_builder()
     else:
@@ -545,6 +568,7 @@ def setup_execution(
         )
     cb = cb.with_serialization_settings(ssb.build())
 
+    # 在所有上下文列表中加入当前上下文，并返回当中上下文
     with FlyteContextManager.with_context(cb) as ctx:
         yield ctx
 
@@ -587,6 +611,7 @@ def _execute_task(
     if len(resolver_args) < 1:
         raise ValueError("cannot be <1")
 
+    # 在当前上下文中执行 dispatch execute
     with setup_execution(
         raw_output_data_prefix,
         output_prefix,
@@ -598,6 +623,7 @@ def _execute_task(
         working_dir = os.getcwd()
         if all(os.path.realpath(path) != working_dir for path in sys.path):
             sys.path.append(working_dir)
+        # resolver 为字符串，从包中解析出类名
         resolver_obj = load_object_from_module(resolver)
 
         def load_task():

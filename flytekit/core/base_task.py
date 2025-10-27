@@ -733,6 +733,7 @@ class PythonTask(TrackedInstance, Task, Generic[T]):
         """
 
         # Invoked before the task is executed
+        # 做一些前置工作，以ray为例，定义runtime_env、上传哪些文件等，初始化ray远程链接
         new_user_params = self.pre_execute(ctx.user_space_params)
 
         if self.enable_deck and ctx.user_space_params is not None:
@@ -740,7 +741,7 @@ class PythonTask(TrackedInstance, Task, Generic[T]):
                 ctx.user_space_params.decks.append(ctx.user_space_params.timeline_deck)
             new_user_params = ctx.user_space_params.with_enable_deck(enable_deck=True).build()
 
-        # Create another execution context with the new user params, but let's keep the same working dir
+        # 创建一个新的执行上下文使用新的用户参数，但保持相同的工作目录不变
         with FlyteContextManager.with_context(
             ctx.with_execution_state(
                 cast(ExecutionState, ctx.execution_state).with_params(user_space_params=new_user_params)
@@ -751,6 +752,7 @@ class PythonTask(TrackedInstance, Task, Generic[T]):
             # TODO We could support default values here too - but not part of the plan right now
             # Translate the input literals to Python native
             try:
+                # 转换 Literal pb map 转换成python参数列表
                 native_inputs = self._literal_map_to_python_input(input_literal_map, exec_ctx)
             except (FlyteUploadDataException, FlyteDownloadDataException):
                 raise
@@ -764,6 +766,9 @@ class PythonTask(TrackedInstance, Task, Generic[T]):
             logger.info(f"Invoking {self.name} with inputs: {native_inputs}")
             with timeit("Execute user level code"):
                 try:
+                    # 调用task中的具体执行方法，以pythorch为例
+                    # 1.对于插件任务，会定义custom配置信息，添加到task参数中，传递至后端
+                    # 异步执行函数: execution_state是local，就直接本地执行，否则放入执行队列中，发送到远程
                     native_outputs = self.execute(**native_inputs)
                 except Exception as e:
                     if is_local_execution:
@@ -790,6 +795,7 @@ class PythonTask(TrackedInstance, Task, Generic[T]):
                     literals_map, native_outputs_as_map = run_sync(
                         self._output_to_literal_map, native_outputs, exec_ctx
                     )
+                # 
                 self._write_decks(native_inputs, native_outputs_as_map, ctx, new_user_params)
             except (FlyteUploadDataException, FlyteDownloadDataException):
                 raise

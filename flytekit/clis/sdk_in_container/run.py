@@ -738,8 +738,10 @@ def run_command(ctx: click.Context, entity: typing.Union[PythonFunctionWorkflow,
                             os.environ[env_var] = value
                     if run_level_params.overwrite_cache:
                         os.environ["FLYTE_LOCAL_CACHE_OVERWRITE"] = "true"
+                    # 本地同步
                     output = entity(**inputs)
                     if inspect.iscoroutine(output):
+                        # 如果是协程函数，异步执行
                         # TODO: make eager mode workflows run with local-mode
                         output = asyncio.run(output)
                     click.echo(output)
@@ -763,6 +765,7 @@ def run_command(ctx: click.Context, entity: typing.Union[PythonFunctionWorkflow,
                         )
                     )
 
+            # 远程执行
             with context_manager.FlyteContextManager.with_context(remote.context.new_builder()):
                 show_files = run_level_params.verbose > 0
                 fast_package_options = FastPackageOptions(
@@ -771,6 +774,7 @@ def run_command(ctx: click.Context, entity: typing.Union[PythonFunctionWorkflow,
                     show_files=show_files,
                 )
 
+                # 远程注册方法
                 remote_entity = remote.register_script(
                     entity,
                     project=run_level_params.project,
@@ -786,6 +790,7 @@ def run_command(ctx: click.Context, entity: typing.Union[PythonFunctionWorkflow,
                     ),
                 )
 
+                # 执行remote
                 run_remote(
                     remote,
                     remote_entity,
@@ -1102,6 +1107,7 @@ class WorkflowCommand(click.RichGroup):
             # Fixed inputs are inputs that are always passed to the launch plan and cannot be overridden
             # Default inputs are inputs that are optional and have a default value
             # The final inputs to the launch plan are a combination of the fixed inputs and the default inputs
+            # 从默认输入中提取默认值
             all_inputs = loaded_entity.python_interface.inputs_with_defaults
             default_inputs = loaded_entity.saved_inputs
             pmap = loaded_entity.parameters
@@ -1126,6 +1132,8 @@ class WorkflowCommand(click.RichGroup):
         else:
             if loaded_entity.__doc__:
                 h = h + click.style(f" {loaded_entity.__doc__}", dim=True)
+        # 同时也从yaml或json文件中读取参数
+        # 最终把参数传递给run_command方法中
         cmd = YamlFileReadingCommand(
             name=entity_name,
             params=params,
