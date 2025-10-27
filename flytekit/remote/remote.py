@@ -507,6 +507,7 @@ class FlyteRemote(object):
         Given a remote returned launchplan, upgrade it to a FlyteLaunchPlan object that holds the interface and
         the FlyteWorkflow object. This can be used in the SDK.
         """
+        # 更目标版本PL对应的WF
         flyte_lp = FlyteLaunchPlan.promote_from_model(lp.id, lp.spec)
         wf_id = flyte_lp.workflow_id
         workflow = self.fetch_workflow(wf_id.project, wf_id.domain, wf_id.name, wf_id.version)
@@ -604,6 +605,7 @@ class FlyteRemote(object):
         """
         if name is None:
             raise user_exceptions.FlyteAssertion("the 'name' argument must be specified.")
+        # 如果version为latest，在最新的版本上创建一个PL
         launch_plan_id = _get_entity_identifier(
             self.client.list_launch_plans_paginated,
             ResourceType.LAUNCH_PLAN,
@@ -612,6 +614,7 @@ class FlyteRemote(object):
             name,
             version,
         )
+        # 获取到目标版本的PL ID
         admin_launch_plan = self.client.get_launch_plan(launch_plan_id)
         return self._upgrade_launchplan(admin_launch_plan)
 
@@ -1611,6 +1614,7 @@ class FlyteRemote(object):
         type_hints = type_hints or {}
         literal_map = {}
 
+        # 根据当前文件切换上下文，remote文件已经在register节点确定
         with self.remote_context() as ctx:
             input_flyte_type_map = entity.interface.inputs
 
@@ -1693,6 +1697,7 @@ class FlyteRemote(object):
             self.client.get_execution(exec_id), remote=self, type_hints=type_hints
         )
 
+        # 如果设置为同步的话，就wait等待
         if wait:
             return self.wait(execution)
         return execution
@@ -1796,6 +1801,7 @@ class FlyteRemote(object):
         """
         if entity.python_interface:
             type_hints = type_hints or entity.python_interface.inputs
+        # FlyteTask 和 FlyteLaunchPlan 都当做lp处理？
         if isinstance(entity, FlyteTask) or isinstance(entity, FlyteLaunchPlan):
             return self.execute_remote_task_lp(
                 entity=entity,
@@ -2010,6 +2016,7 @@ class FlyteRemote(object):
         NOTE: the name and version arguments are currently not used and only there consistency in the function signature
         """
         launch_plan = self.fetch_launch_plan(entity.id.project, entity.id.domain, entity.id.name, entity.id.version)
+        # 所有的task和wf其实都是LP
         return self.execute_remote_task_lp(
             launch_plan,
             inputs,
