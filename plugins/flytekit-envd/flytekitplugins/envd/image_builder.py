@@ -56,6 +56,9 @@ def envd_context_switch(registry: str):
     if os.getenv(FLYTE_ENVD_CONTEXT):
         execute_command(f"envd context use --name {os.getenv(FLYTE_ENVD_CONTEXT)}")
         return
+    # TODO: 此处切换至offline模式, 指定镜像:moby/buildkit:v0.25.1-rootless
+    # --builder docker-container://buildkitd
+    # --builder-image registry.intra.local/moby/buildkit:v0.13.1
     if registry == FLYTE_LOCAL_REGISTRY:
         # Assume buildkit daemon is running within the sandbox and exposed on port 30003
         command = "envd context create --name flyte-sandbox --builder tcp --builder-address localhost:30003 --use"
